@@ -108,7 +108,8 @@ rule metaphlan:
 		output_mp4=touch("metaphlan_output/{sample}_metaphlan/profiled_metagenome_{sample}.txt"),
 		bt2out="metaphlan_output/{sample}_metaphlan/metagenome.bowtie2.bz2",
 		sambz2="metaphlan_output/{sample}_metaphlan/{sample}_mp4sam.sam.bz2"
-	threads: 16
+	threads: 32
+	priority: 100
 	shell:
 		"""
 		seqkit stats -b {input.concatenated} > {output.stats_4} && 
@@ -127,7 +128,8 @@ rule humann:
 		gene=touch("humann_output/{sample}_humann/{sample}_genefamilies.tsv"),
 		path_temp="humann_output/pathabundance/{sample}_pathabundance.tsv",
 		gene_temp="humann_output/genefamilies/{sample}_genefamilies.tsv"
-	threads: 64
+	threads: 32
+	priority: 100
 	shell:
 		"""
 		humann --input {input.fq} --threads {threads} --memory-use maximum -v --search-mode uniref90 \

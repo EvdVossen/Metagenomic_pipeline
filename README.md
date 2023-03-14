@@ -65,5 +65,4 @@ The pipelline generates the following things:
 	- Activate the conda environment (if you haven't done so already): "conda activate mg4"
 	- "snakemake -s humann_strainphlan.snmk.py --cores 64"
 		- Make sure that the "df_for_thresholds.csv" or its equivalent is present in the map
-		- Make sure to have edited the path to the raw fastq files
-		- lines 31 and 32 of the snakefile ("humann_strainphlan.snmk.py")
+		- Make sure to have edited the path to the raw fastq files (lines 31 and 32 of the snakefile "humann_strainphlan.snmk.py")

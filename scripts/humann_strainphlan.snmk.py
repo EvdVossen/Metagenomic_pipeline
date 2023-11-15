@@ -2,7 +2,7 @@ import pandas as pd
 import glob
 
 #SAMPLES
-SAMPLES = list(pd.read_csv("df_with_baria_fatmed_cork.csv").iloc[:,0])
+SAMPLES = list(pd.read_csv("df_for_thresholds.csv").iloc[:,0])
 
 def get_file_names(wildcards):
     #basically makes the checkpoint run before this function; so that we have the output (sgbs) defined once the checkpoint is done.
@@ -12,16 +12,12 @@ def get_file_names(wildcards):
 
 def final_rule(wildcards):
     #same as the earlier function "get_file_names"
-    #Just to get the SGB defined for the params in the last function and to make the rule run at last and not straight after the checkpoint
     ck_output = checkpoints.generate_wildcard.get(**wildcards).output[0] 
     SGB, = glob_wildcards(os.path.join(ck_output, "{sgb}.txt"))
     return expand(rules.threshold_with_info.output.tabout, sgb = SGB) + expand(rules.threshold_with_info.output.strainsh, sgb = SGB)
 
 rule all:
 	input:
-#		expand("metaphlan_output/{sample}_metaphlan/{sample}_mp4sam.sam.bz2", sample=SAMPLES),
-#		expand("humann_output/{sample}_humann",sample=SAMPLES),
-#		expand("Humann_merged_gene_families_cpm_stratified.txt"),
 		expand("Metaphlan_merged_abundance_table_SGB.txt"),
 		expand("Consensus_markers/{sample}_mp4sam.pkl", sample=SAMPLES),
 		expand("Clades/print_clades_only.tsv"),
@@ -30,8 +26,8 @@ rule all:
 
 rule fastp:
 	input:
-		fw_reads="/media/eduard/Elements/fatmed_shotgun_data/FATMED_shotgun/{sample}_1.fastq.gz",
-		rv_reads="/media/eduard/Elements/fatmed_shotgun_data/FATMED_shotgun/{sample}_2.fastq.gz"
+		fw_reads="/path/to/sample/{sample}_R1.fastq.gz",
+		rv_reads="/path/to/sample/{sample}_R2.fastq.gz"
 	output:
 		fw_trimmed_reads=temp("{sample}_1_trim.fq.gz"),
 		rv_trimmed_reads=temp("{sample}_2_trim.fq.gz"),
@@ -92,18 +88,14 @@ rule subsampling:
 		fw_subsampled=temp("{sample}_1_subsample.fq.gz"),
 		rv_subsampled=temp("{sample}_2_subsample.fq.gz"),
 		stats_3="logs/{sample}/filtered_reads.out",
-		out_loc=temp("{sample}.fq"),
-		concatenated="/media/eduard/Elements/fatmed_shotgun_data/FATMED_FQ/{sample}.fq"
+		concatenated=temp("{sample}.fq")
 	threads: 16
-	resources:
-		limit_space=6
 	shell:
 		"""
 		seqkit stats -b {input.fw_filtered} > {output.stats_3} && 
 		seqtk sample -s128 {input.fw_filtered} 20000000 > {output.fw_subsampled} && 
 		seqtk sample -s128 {input.rv_filtered} 20000000 > {output.rv_subsampled} && 
-		cat {output.fw_subsampled} {output.rv_subsampled} > {output.out_loc} &&
-		cp {output.out_loc} {output.concatenated}
+		cat {output.fw_subsampled} {output.rv_subsampled} > {output.concatenated}
 		"""
 
 rule metaphlan:
@@ -269,7 +261,7 @@ rule ngd:
 
 rule threshold_with_info:
 	input:
-		df_thres="df_with_baria_fatmed_cork_20230925.csv",
+		df_thres="df_for_thresholds.csv",
 		sgb_dat=rules.mp4_table.output.bugs_joined,
 		info=rules.strainphlan.output.info,
 		aln=rules.strainphlan.output.aln,

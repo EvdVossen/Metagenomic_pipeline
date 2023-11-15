@@ -4,7 +4,7 @@ import sys
 import pandas as pd
 from itertools import takewhile
 
-def merge_strainsharing_data(ttabIn, ttabOut):
+def merge_strainsharing_data(ttabIn, ttabOut1, ttabOut2):
     profiles_list = []
     merged_tables = None
 
@@ -15,8 +15,22 @@ def merge_strainsharing_data(ttabIn, ttabOut):
         profiles_list.append(iIn)
 
     merged_tables = pd.concat([merged_tables, pd.concat(profiles_list, axis=1)], axis=1)
-    merged_tables.to_csv(ttabOut, sep='\t')
+    merged_tables.to_csv(ttabOut1, sep='\t')
 
+    profiles_list_dist = []
+    merged_tables_dist = None
+
+    for g in ttabIn:
+        headers = [x.strip() for x in takewhile(lambda x: x.startswith('X'), open(g))]
+        names = headers[-1].split(',')
+        iIn = pd.read_csv(g, sep=',', skiprows=len(headers), names=names, usecols=[0,1,2,3], index_col=(0,1))
+        iIn.rename(columns={names[2]: names[3], names[3]: names[2]}, inplace=True)
+        iIn.drop(columns=[names[2]], inplace=True)
+        profiles_list_dist.append(iIn)
+
+    merged_tables_dist = pd.concat([merged_tables_dist, pd.concat(profiles_list_dist, axis=1)], axis=1)
+    merged_tables_dist.to_csv(ttabOut2, sep='\t')
+    
 def merge_threshold_data(suptabIn, suptabOut):
     profiles_list = []
     merged_tables = None
@@ -34,14 +48,10 @@ argp = argparse.ArgumentParser(prog="concat_strainsharing_thresholds.py",
                                description="Performs a table join on one or more output files.")
 argp.add_argument("-s", metavar="input.csv", nargs="*", help="One or more csv tables to join")
 argp.add_argument("-t", metavar="input.csv", nargs="*", help="One or more csv tables consisting of nGD data to join")
-argp.add_argument('-o', metavar="output.txt", help="Name of output file in which joined nGD tables are saved")
+argp.add_argument('-o', metavar="output.txt", help="Name of output file in which joined nGD tables (binary) are saved")
 argp.add_argument('-p', metavar="output.txt", help="Name of output file in which joined supplemental tables are saved")
+argp.add_argument('-n', metavar="output.txt", help="Name of output file in which joined nGD tables (distances) are saved")
 
-argp.usage = (argp.format_usage() + "\nPlease make sure to supply file paths to the files to combine.\n\n" +
-              "If combining 2 files (Table_strainsharing_t__SGB4951.csv and Table_strainsharing_t__SGB13979.csv) the call should be:\n" +
-              "   ./concat_files.py Table_strainsharing_t__SGB4951.csv Table_strainsharing_t__SGB13979.csv > output.txt\n\n" +
-              "A wildcard to indicate all .csv files that start with Table can be used as follows:\n" +
-              "    ./concat_files.py Table_strainsharing*.csv > output.txt")
 
 def main():
     args = argp.parse_args()
@@ -59,10 +69,11 @@ def main():
         if args.s:
             print('Concat_files: No threshold table files to merge!')
             print('Concat_files: strainsharing data is present, merging this')
-            merge_strainsharing_data(args.s, open(args.o, 'w') if args.o else sys.stdout)
+            
+            merge_strainsharing_data(args.s, open(args.o, 'w') if args.o else sys.stdout, open(args.n, 'w') if args.n else sys.stdout)
         return
     
-    merge_strainsharing_data(args.s, open(args.o, 'w') if args.o else sys.stdout)
+    merge_strainsharing_data(args.s, open(args.o, 'w') if args.o else sys.stdout, open(args.n, 'w') if args.n else sys.stdout)
     merge_threshold_data(args.t, open(args.p,'w') if args.p else sys.stdout)
 
 if __name__ == '__main__':

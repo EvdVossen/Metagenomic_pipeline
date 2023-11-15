@@ -2,7 +2,7 @@ import pandas as pd
 import glob
 
 #SAMPLES
-SAMPLES = list(pd.read_csv("df_for_thresholds.csv").iloc[:,0])
+SAMPLES = list(pd.read_csv("df_with_baria_fatmed_cork.csv").iloc[:,0])
 
 def get_file_names(wildcards):
     #basically makes the checkpoint run before this function; so that we have the output (sgbs) defined once the checkpoint is done.
@@ -12,14 +12,16 @@ def get_file_names(wildcards):
 
 def final_rule(wildcards):
     #same as the earlier function "get_file_names"
-    #Just to make sure the final rule starts running at last and not straight after the checkpoint
+    #Just to get the SGB defined for the params in the last function and to make the rule run at last and not straight after the checkpoint
     ck_output = checkpoints.generate_wildcard.get(**wildcards).output[0] 
     SGB, = glob_wildcards(os.path.join(ck_output, "{sgb}.txt"))
     return expand(rules.threshold_with_info.output.tabout, sgb = SGB) + expand(rules.threshold_with_info.output.strainsh, sgb = SGB)
 
 rule all:
 	input:
-		expand("Humann_merged_gene_families_cpm_stratified.txt"),
+#		expand("metaphlan_output/{sample}_metaphlan/{sample}_mp4sam.sam.bz2", sample=SAMPLES),
+#		expand("humann_output/{sample}_humann",sample=SAMPLES),
+#		expand("Humann_merged_gene_families_cpm_stratified.txt"),
 		expand("Metaphlan_merged_abundance_table_SGB.txt"),
 		expand("Consensus_markers/{sample}_mp4sam.pkl", sample=SAMPLES),
 		expand("Clades/print_clades_only.tsv"),
@@ -28,8 +30,8 @@ rule all:
 
 rule fastp:
 	input:
-		fw_reads="/path/to/sample/{sample}_R1.fastq.gz",
-		rv_reads="/path/to/sample/{sample}_R2.fastq.gz"
+		fw_reads="/media/eduard/Elements/fatmed_shotgun_data/FATMED_shotgun/{sample}_1.fastq.gz",
+		rv_reads="/media/eduard/Elements/fatmed_shotgun_data/FATMED_shotgun/{sample}_2.fastq.gz"
 	output:
 		fw_trimmed_reads=temp("{sample}_1_trim.fq.gz"),
 		rv_trimmed_reads=temp("{sample}_2_trim.fq.gz"),
@@ -90,14 +92,18 @@ rule subsampling:
 		fw_subsampled=temp("{sample}_1_subsample.fq.gz"),
 		rv_subsampled=temp("{sample}_2_subsample.fq.gz"),
 		stats_3="logs/{sample}/filtered_reads.out",
-		concatenated=temp("{sample}.fq")
+		out_loc=temp("{sample}.fq"),
+		concatenated="/media/eduard/Elements/fatmed_shotgun_data/FATMED_FQ/{sample}.fq"
 	threads: 16
+	resources:
+		limit_space=6
 	shell:
 		"""
 		seqkit stats -b {input.fw_filtered} > {output.stats_3} && 
 		seqtk sample -s128 {input.fw_filtered} 20000000 > {output.fw_subsampled} && 
 		seqtk sample -s128 {input.rv_filtered} 20000000 > {output.rv_subsampled} && 
-		cat {output.fw_subsampled} {output.rv_subsampled} > {output.concatenated}
+		cat {output.fw_subsampled} {output.rv_subsampled} > {output.out_loc} &&
+		cp {output.out_loc} {output.concatenated}
 		"""
 
 rule metaphlan:
@@ -109,7 +115,6 @@ rule metaphlan:
 		bt2out="metaphlan_output/{sample}_metaphlan/metagenome.bowtie2.bz2",
 		sambz2="metaphlan_output/{sample}_metaphlan/{sample}_mp4sam.sam.bz2"
 	threads: 32
-	priority: 100
 	shell:
 		"""
 		seqkit stats -b {input.concatenated} > {output.stats_4} && 
@@ -129,7 +134,6 @@ rule humann:
 		path_temp="humann_output/pathabundance/{sample}_pathabundance.tsv",
 		gene_temp="humann_output/genefamilies/{sample}_genefamilies.tsv"
 	threads: 32
-	priority: 100
 	shell:
 		"""
 		humann --input {input.fq} --threads {threads} --memory-use maximum -v --search-mode uniref90 \
@@ -204,7 +208,7 @@ rule get_sgblist:
 	threads: 1
 	shell:
 		"""
-		strainphlan -s {input.pkl}  --mutation_rates --sample_with_n_markers 20 --marker_in_n_samples 50 --sample_with_n_markers_after_filt 10 \
+		strainphlan -s {input.pkl} --mutation_rates --sample_with_n_markers 20 --marker_in_n_samples 50 --sample_with_n_markers_after_filt 10 \
 		--print_clades_only -o {params.cladesdir} && 
 		touch {output.ctsv}
 		"""
@@ -265,7 +269,7 @@ rule ngd:
 
 rule threshold_with_info:
 	input:
-		df_thres="df_for_thresholds.csv",
+		df_thres="df_with_baria_fatmed_cork_20230925.csv",
 		sgb_dat=rules.mp4_table.output.bugs_joined,
 		info=rules.strainphlan.output.info,
 		aln=rules.strainphlan.output.aln,
@@ -284,7 +288,7 @@ rule threshold_with_info:
 
 def get_wildcards(wildcards):
     #same as the earlier function "get_file_names"
-    #Just to make sure the final rule starts running at last and not straight after the checkpoint
+    #Just to get the SGB defined for the params in the last function and to make the rule run at last and not straight after the checkpoint
     ck_output = checkpoints.generate_wildcard.get(**wildcards).output[0] 
     SGB, = glob_wildcards(os.path.join(ck_output, "{sgb}.txt"))
     return SGB
@@ -294,7 +298,8 @@ rule concat_tables_all_SGBs:
 		final_rule
 	output:
 		concat_s="Table_strainsharing.txt",
-		concat_t="Table_thresholds.txt"
+		concat_t="Table_thresholds.txt",
+		concat_n="Table_nGD.txt"
 	params:
 		thres=lambda wildcards, input: expand(rules.threshold_with_info.output.tabout, sgb = get_wildcards(wildcards)),
 		strain=lambda wildcards, input: expand(rules.threshold_with_info.output.strainsh, sgb = get_wildcards(wildcards))
@@ -302,5 +307,5 @@ rule concat_tables_all_SGBs:
 	shell:
 		"""
 		python scripts/concat_strainsharing_thresholds.py -t {params.thres} -s {params.strain} \
-		-o {output.concat_s} -p {output.concat_t}
+		-o {output.concat_s} -p {output.concat_t} -n {output.concat_n}
 		"""
